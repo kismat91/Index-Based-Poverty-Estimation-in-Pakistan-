@@ -28,6 +28,32 @@ from sklearn.preprocessing import MinMaxScaler
 Hies_data = pd.read_stata(abspath_curr + '/data/PSLM_HIES/310_HIES201819_Rescaledbyhhsize_24618obs.dta')
 print(Hies_data.head())
 
+from pandas.core.tools.datetimes import unique
+test= Hies_data['District']
+test1= unique(test)
+print(test1)
+len(test1)
+
+from pandas.core.tools.datetimes import unique
+test= Pslm_data['District']
+test1= unique(test)
+print(test1)
+len(test1)
+
+!pip install pyreadstat
+import pyreadstat
+
+# Assuming you have a Stata dataset file named 'your_data.dta'
+df, meta = pyreadstat.read_dta(abspath_curr + '/data/PSLM_HIES/310_HIES201819_Rescaledbyhhsize_24618obs.dta')
+
+# Access variable labels from the metadata
+variable_labels = meta.column_labels
+
+# Print variable labels
+for i, var_label in enumerate(variable_labels):
+    var_name = df.columns[i]
+    print(f"Variable: {var_name}, Label: {var_label}")
+
 Pslm_data = pd.read_stata(abspath_curr + '/data/PSLM_HIES/310_PSLM201920_Rescaledbyhhsize_160654obs.dta')
 Pslm_data.head()
 
@@ -212,6 +238,12 @@ basis_vector = basis_vector.sort_values(by='Magnitude', ascending=False)
 # Save the basis vector to a CSV file
 basis_vector.to_csv('asset_index_PSLM_basis_vector.csv', index=False)
 
+# Add the wealth index as a new column in your DataFrame
+Pslm_data['Wealth_Index1'] = asset_index
+
+# Save the updated DataFrame with the wealth index to a new CSV file
+Pslm_data.to_csv('PSLM_data_with_wealth_index.csv', index=False)
+
 """## PCA for Urban of PSLM"""
 
 selected_variables = Pslm_data[Pslm_data['rural']=='urban'][variables_list1]
@@ -292,6 +324,12 @@ basis_vector = basis_vector.sort_values(by='Magnitude', ascending=False)
 # Save the basis vector to a CSV file
 basis_vector.to_csv('asset_index_HIES_basis_vector.csv', index=False)
 
+# Add the wealth index as a new column in your DataFrame
+Hies_data['Wealth_Index1'] = asset_index
+
+# Save the updated DataFrame with the wealth index to a new CSV file
+Hies_data.to_csv('HIES_data_with_wealth_index.csv', index=False)
+
 """## PCA for Urban of HIES"""
 
 # Extract the selected columns
@@ -345,3 +383,194 @@ basis_vector = basis_vector.sort_values(by='Magnitude', ascending=False)
 
 # Save the basis vector to a CSV file
 basis_vector.to_csv('asset_index_HIES_RURAL_basis_vector.csv', index=False)
+
+"""## Harmonizing wealth indices"""
+
+# Calculate descriptive statistics
+mean_HIES = np.mean(Hies_data['Wealth_Index1'])
+std_HIES = np.std(Hies_data['Wealth_Index1'])
+
+mean_PSLM = np.mean(Pslm_data['Wealth_Index1'])
+std_PSLM = np.std(Pslm_data['Wealth_Index1'])
+
+# Visual inspection (histograms)
+import matplotlib.pyplot as plt
+
+plt.hist(Hies_data['Wealth_Index1'], bins=30, alpha=0.5, label='HIES')
+plt.hist(Pslm_data['Wealth_Index1'], bins=30, alpha=0.5, label='PSLM')
+plt.legend(loc='upper right')
+plt.xlabel('Wealth Index')
+plt.ylabel('Frequency')
+plt.show()
+
+# Assuming HIES_data and PSLM_data are pandas DataFrames
+# Align the data to have the same length
+min_length = min(len(Hies_data), len(Pslm_data))
+HIES_data = Hies_data.iloc[:min_length]
+PSLM_data = Pslm_data.iloc[:min_length]
+
+# Load the PSLM and HIES data with wealth indices
+pslm_data = pd.read_csv('PSLM_data_with_wealth_index.csv')
+hies_data = pd.read_csv('HIES_data_with_wealth_index.csv')
+
+# Standardize wealth indices within each dataset
+pslm_data['Wealth_Index_PSLM_Standardized'] = (pslm_data['Wealth_Index1'] - pslm_data['Wealth_Index1'].mean()) / pslm_data['Wealth_Index1'].std()
+hies_data['Wealth_Index_HIES_Standardized'] = (hies_data['Wealth_Index1'] - hies_data['Wealth_Index1'].mean()) / hies_data['Wealth_Index1'].std()
+
+# Calculate weighted average for harmonized wealth index
+pslm_weight = len(pslm_data)
+hies_weight = len(hies_data)
+
+harmonized_wealth_index = (pslm_weight * pslm_data['Wealth_Index_PSLM_Standardized'] + hies_weight * hies_data['Wealth_Index_HIES_Standardized']) / (pslm_weight + hies_weight)
+
+# Unstandardize the harmonized wealth index
+mean_harmonized = harmonized_wealth_index.mean()
+std_harmonized = harmonized_wealth_index.std()
+
+harmonized_wealth_index_unstandardized = (harmonized_wealth_index * std_harmonized) + mean_harmonized
+
+# Add the harmonized wealth index to both datasets
+pslm_data['Harmonized_Wealth_Index'] = harmonized_wealth_index_unstandardized
+hies_data['Harmonized_Wealth_Index'] = harmonized_wealth_index_unstandardized
+
+# Save the updated datasets with harmonized wealth indices
+pslm_data.to_csv('PSLM_data_with_harmonized_wealth_index.csv', index=False)
+hies_data.to_csv('HIES_data_with_harmonized_wealth_index.csv', index=False)
+
+# Load the PSLM and HIES data with wealth indices
+pslm_data = pd.read_csv('PSLM_data_with_wealth_index.csv')
+hies_data = pd.read_csv('HIES_data_with_wealth_index.csv')
+
+# Standardize wealth indices within each dataset
+pslm_data['Wealth_Index_PSLM_Standardized'] = (pslm_data['Wealth_Index1'] - pslm_data['Wealth_Index1'].mean()) / pslm_data['Wealth_Index1'].std()
+hies_data['Wealth_Index_HIES_Standardized'] = (hies_data['Wealth_Index1'] - hies_data['Wealth_Index1'].mean()) / hies_data['Wealth_Index1'].std()
+
+# Calculate weighted average for harmonized wealth index
+pslm_weight = len(pslm_data)
+hies_weight = len(hies_data)
+
+harmonized_wealth_index = (pslm_weight * pslm_data['Wealth_Index_PSLM_Standardized'] + hies_weight * hies_data['Wealth_Index_HIES_Standardized']) / (pslm_weight + hies_weight)
+
+# Impute missing values (NaN) in the harmonized wealth index with the mean
+mean_harmonized = harmonized_wealth_index.mean()
+harmonized_wealth_index.fillna(mean_harmonized, inplace=True)
+
+# Add the harmonized wealth index to both datasets
+pslm_data['Harmonized_Wealth_Index1'] = harmonized_wealth_index
+hies_data['Harmonized_Wealth_Index1'] = harmonized_wealth_index
+
+# Save the updated datasets with harmonized wealth indices
+pslm_data.to_csv('PSLM_data_with_harmonized_wealth_index.csv', index=False)
+hies_data.to_csv('HIES_data_with_harmonized_wealth_index.csv', index=False)
+
+"""## Household wealth correlates with household expenditure"""
+
+from scipy.stats import spearmanr
+
+# Load the HIES data with the wealth index
+hies_data = pd.read_csv('HIES_data_with_wealth_index.csv')
+
+# Calculate the Spearman rank correlation
+correlation, p_value = spearmanr(hies_data['Wealth_Index1'], hies_data['lnexpM'])
+
+# Print the correlation coefficient
+print(f"Spearman Rank Correlation: {correlation:.2f}")
+
+# Print the p-value to test for statistical significance
+print(f"P-Value: {p_value:.4f}")
+
+"""## Comparing the RWI with the wealth index from the HIES and PSLM data"""
+
+# Load the RWI data from the CSV file
+rwi_data = pd.read_csv(abspath_curr + '/data/pak_rwi.csv')
+
+districts = gpd.read_file(abspath_curr + '/data/pak_admbnda_adm2_wfp_20220909.shp')
+print(districts.head())
+
+from pandas.core.tools.datetimes import unique
+test=districts['ADM2_EN']
+test1= unique(test)
+print(test1)
+len(test1)
+
+geometry = [Point(xy) for xy in zip(rwi_data['longitude'], rwi_data['latitude'])]
+rwi_data = gpd.GeoDataFrame(rwi_data, geometry=geometry)
+
+# Perform the spatial join to associate RWI data with districts
+rwi_data_with_district = gpd.sjoin(rwi_data, districts, how="left", op="within")
+
+district_mean_rwi = rwi_data_with_district.groupby('ADM2_EN')['rwi'].mean().reset_index()
+
+# Sort the districts by RWI score in descending order
+ranked_districts = district_mean_rwi.sort_values(by='rwi', ascending=False)
+
+# Print the ranked districts
+print(ranked_districts)
+
+# Load the PSLM and HIES data with wealth indices
+pslm_data = pd.read_csv('PSLM_data_with_wealth_index.csv')
+hies_data = pd.read_csv('HIES_data_with_wealth_index.csv')
+
+# Aggregating Wealth Index
+hies_district_wealth = hies_data.groupby('District')['Wealth_Index1'].mean().reset_index()
+pslm_district_wealth = pslm_data.groupby('District')['Wealth_Index1'].mean().reset_index()
+
+# Filter the RWI data to include only the common districts
+common_districts = set(hies_district_wealth['District']).intersection(pslm_district_wealth['District'])
+filtered_rwi_data = rwi_data_with_district[rwi_data_with_district['ADM2_EN'].isin(common_districts)]
+
+rwi_district_wealth = filtered_rwi_data.groupby('ADM2_EN')['rwi'].mean()
+
+# Ranking Districts
+hies_district_ranking = hies_district_wealth.sort_values(by='Wealth_Index1', ascending=False).reset_index(drop=True)
+pslm_district_ranking = pslm_district_wealth.sort_values(by='Wealth_Index1', ascending=False).reset_index(drop=True)
+rwi_district_ranking = rwi_district_wealth.rank(ascending=False).astype(int)
+
+# Print or save the rankings
+hies_district_ranking.to_csv('hies_district_ranking.csv', index=False)
+pslm_district_ranking.to_csv('pslm_district_ranking.csv', index=False)
+rwi_district_ranking.to_csv('rwi_district_ranking.csv', index=False)
+
+district_mean_rwi = pslm_data.groupby('District')['Wealth_Index1'].mean().reset_index()
+
+# Sort the districts by RWI score in descending order
+ranked_districts = district_mean_rwi.sort_values(by='Wealth_Index1', ascending=False)
+
+# Print the ranked districts
+print(ranked_districts)
+
+district_mean_rwi = hies_data.groupby('District')['Wealth_Index1'].mean().reset_index()
+
+# Sort the districts by RWI score in descending order
+ranked_districts = district_mean_rwi.sort_values(by='Wealth_Index1', ascending=False)
+
+# Print the ranked districts
+print(ranked_districts)
+
+# Calculate correlations between HIES, PSLM, and RWI rankings
+corr_hies_rwi, _ = spearmanr(hies_district_ranking['Wealth_Index1'], rwi_district_ranking)
+corr_pslm_rwi, _ = spearmanr(pslm_district_ranking['Wealth_Index1'], rwi_district_ranking)
+corr_hies_pslm, _ = spearmanr(hies_district_ranking['Wealth_Index1'], pslm_district_ranking['Wealth_Index1'])
+
+# Print correlations
+print(f"Spearman's rank correlation between HIES and RWI: {corr_hies_rwi}")
+print(f"Spearman's rank correlation between PSLM and RWI: {corr_pslm_rwi}")
+print(f"Spearman's rank correlation between HIES and PSLM: {corr_hies_pslm}")
+
+# Perform bootstrap resampling for uncertainty estimation
+n_bootstrap_samples = 1000
+correlation_samples = []
+
+for _ in range(n_bootstrap_samples):
+    # Randomly sample districts with replacement
+    sample_indices = np.random.choice(len(hies_data), len(hies_data), replace=True)
+    hies_sample = hies_data.iloc[sample_indices]
+    pslm_sample = pslm_data.iloc[sample_indices]
+
+    # Calculate correlations for the bootstrap sample
+    corr_hies_pslm_sample, _ = spearmanr(hies_sample['Wealth_Index1'], pslm_sample['Wealth_Index1'])
+    correlation_samples.append(corr_hies_pslm_sample)
+
+# Calculate confidence intervals
+confidence_interval = np.percentile(correlation_samples, [2.5, 97.5])
+print(f"95% Confidence Interval for HIES and PSLM correlation: {confidence_interval}")
