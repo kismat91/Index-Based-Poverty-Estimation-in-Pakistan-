@@ -20,6 +20,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
 import numpy as np
+import seaborn as sns
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -27,18 +28,6 @@ from sklearn.preprocessing import MinMaxScaler
 
 Hies_data = pd.read_stata(abspath_curr + '/data/PSLM_HIES/310_HIES201819_Rescaledbyhhsize_24618obs.dta')
 print(Hies_data.head())
-
-from pandas.core.tools.datetimes import unique
-test= Hies_data['District']
-test1= unique(test)
-print(test1)
-len(test1)
-
-from pandas.core.tools.datetimes import unique
-test= Pslm_data['District']
-test1= unique(test)
-print(test1)
-len(test1)
 
 !pip install pyreadstat
 import pyreadstat
@@ -56,10 +45,6 @@ for i, var_label in enumerate(variable_labels):
 
 Pslm_data = pd.read_stata(abspath_curr + '/data/PSLM_HIES/310_PSLM201920_Rescaledbyhhsize_160654obs.dta')
 Pslm_data.head()
-
-Pslm_data['rural']
-
-
 
 """## Summary of PSLM and HIES
 
@@ -244,6 +229,10 @@ Pslm_data['Wealth_Index1'] = asset_index
 # Save the updated DataFrame with the wealth index to a new CSV file
 Pslm_data.to_csv('PSLM_data_with_wealth_index.csv', index=False)
 
+#from google.colab import files
+
+#files.download('PSLM_data_with_wealth_index.csv')
+
 """## PCA for Urban of PSLM"""
 
 selected_variables = Pslm_data[Pslm_data['rural']=='urban'][variables_list1]
@@ -423,34 +412,6 @@ hies_weight = len(hies_data)
 
 harmonized_wealth_index = (pslm_weight * pslm_data['Wealth_Index_PSLM_Standardized'] + hies_weight * hies_data['Wealth_Index_HIES_Standardized']) / (pslm_weight + hies_weight)
 
-# Unstandardize the harmonized wealth index
-mean_harmonized = harmonized_wealth_index.mean()
-std_harmonized = harmonized_wealth_index.std()
-
-harmonized_wealth_index_unstandardized = (harmonized_wealth_index * std_harmonized) + mean_harmonized
-
-# Add the harmonized wealth index to both datasets
-pslm_data['Harmonized_Wealth_Index'] = harmonized_wealth_index_unstandardized
-hies_data['Harmonized_Wealth_Index'] = harmonized_wealth_index_unstandardized
-
-# Save the updated datasets with harmonized wealth indices
-pslm_data.to_csv('PSLM_data_with_harmonized_wealth_index.csv', index=False)
-hies_data.to_csv('HIES_data_with_harmonized_wealth_index.csv', index=False)
-
-# Load the PSLM and HIES data with wealth indices
-pslm_data = pd.read_csv('PSLM_data_with_wealth_index.csv')
-hies_data = pd.read_csv('HIES_data_with_wealth_index.csv')
-
-# Standardize wealth indices within each dataset
-pslm_data['Wealth_Index_PSLM_Standardized'] = (pslm_data['Wealth_Index1'] - pslm_data['Wealth_Index1'].mean()) / pslm_data['Wealth_Index1'].std()
-hies_data['Wealth_Index_HIES_Standardized'] = (hies_data['Wealth_Index1'] - hies_data['Wealth_Index1'].mean()) / hies_data['Wealth_Index1'].std()
-
-# Calculate weighted average for harmonized wealth index
-pslm_weight = len(pslm_data)
-hies_weight = len(hies_data)
-
-harmonized_wealth_index = (pslm_weight * pslm_data['Wealth_Index_PSLM_Standardized'] + hies_weight * hies_data['Wealth_Index_HIES_Standardized']) / (pslm_weight + hies_weight)
-
 # Impute missing values (NaN) in the harmonized wealth index with the mean
 mean_harmonized = harmonized_wealth_index.mean()
 harmonized_wealth_index.fillna(mean_harmonized, inplace=True)
@@ -479,7 +440,7 @@ print(f"Spearman Rank Correlation: {correlation:.2f}")
 # Print the p-value to test for statistical significance
 print(f"P-Value: {p_value:.4f}")
 
-"""## Comparing the RWI with the wealth index from the HIES and PSLM data"""
+"""## Comparing the RWI with the wealth index from the PSLM data"""
 
 # Load the RWI data from the CSV file
 rwi_data = pd.read_csv(abspath_curr + '/data/pak_rwi.csv')
@@ -487,25 +448,371 @@ rwi_data = pd.read_csv(abspath_curr + '/data/pak_rwi.csv')
 districts = gpd.read_file(abspath_curr + '/data/pak_admbnda_adm2_wfp_20220909.shp')
 print(districts.head())
 
-from pandas.core.tools.datetimes import unique
-test=districts['ADM2_EN']
-test1= unique(test)
-print(test1)
-len(test1)
-
 geometry = [Point(xy) for xy in zip(rwi_data['longitude'], rwi_data['latitude'])]
 rwi_data = gpd.GeoDataFrame(rwi_data, geometry=geometry)
 
 # Perform the spatial join to associate RWI data with districts
 rwi_data_with_district = gpd.sjoin(rwi_data, districts, how="left", op="within")
 
-district_mean_rwi = rwi_data_with_district.groupby('ADM2_EN')['rwi'].mean().reset_index()
+# Filter the data to retain only the districts in Punjab, Sindh, Balochistan, KP, and Islamabad
+provinces_to_include = ["Punjab", "Sindh", "Balochistan", "Khyber Pakhtunkhwa", "Islamabad"]
+filtered_rwi_district_data = rwi_data_with_district[rwi_data_with_district['ADM1_EN'].isin(provinces_to_include)]
+
+filtered_rwi_district_data.head()
+
+# Create a mapping dictionary for district names
+district_mapping = {
+    'Central Karachi': 'Karachi Central',
+    'Chitral Lower': 'Chitral',
+    'Chitral Upper': 'Chitral',
+    'D. I. Khan': 'Dera Ismail Khan',
+    'East Karachi': 'Karachi East',
+    'Kashmore': 'Kashmor',
+    'Kohistan Lower': 'Kohistan',
+    'Kohistan Upper': 'Kohistan',
+    'Korangi Karachi': 'Korangi',
+    'Leiah': 'Layyah',
+    'Malakand': 'Malakand Protected Area',
+    'Malir Karachi': 'Malir',
+    'Shaheed Benazir Abad': 'Shaheed Benazirabad',
+    'South Karachi': 'Karachi South',
+    'Tor Ghar': 'Torghar',
+    'West Karachi': 'Karachi West',
+    'Shaheed Sikandarabad': 'Surab'
+}
+
+# Apply the mapping dictionary to the 'ADM2_EN' column of the filtered_rwi_district_data dataframe
+filtered_rwi_district_data['ADM2_EN'] = filtered_rwi_district_data['ADM2_EN'].replace(district_mapping)
+
+district_mean_rwi = filtered_rwi_district_data.groupby('ADM2_EN')['rwi'].mean().reset_index()
 
 # Sort the districts by RWI score in descending order
 ranked_districts = district_mean_rwi.sort_values(by='rwi', ascending=False)
 
 # Print the ranked districts
 print(ranked_districts)
+
+pslm_data = pd.read_csv('PSLM_data_with_wealth_index.csv')
+# Aggregating Wealth Index for PSLM
+pslm_district_wealth = pslm_data.groupby('District')['Wealth_Index1'].mean().reset_index()
+
+# Filter the RWI data to include only the common districts
+common_districts = set(pslm_district_wealth['District'])
+filtered_rwi_data = filtered_rwi_district_data[filtered_rwi_district_data['ADM2_EN'].isin(common_districts)]
+
+# Aggregating RWI scores by district
+rwi_district_wealth = filtered_rwi_data.groupby('ADM2_EN')['rwi'].mean()
+
+# Ranking Districts based on wealth indices
+pslm_district_ranking = pslm_district_wealth.sort_values(by='Wealth_Index1', ascending=False).reset_index(drop=True)
+rwi_district_ranking = rwi_district_wealth.sort_values(ascending=False).reset_index()
+
+# Save the rankings (optional)
+pslm_district_ranking.to_csv('pslm_district_ranking.csv', index=False)
+rwi_district_ranking.to_csv('rwi_district_ranking.csv', index=False)
+
+# Calculate Spearman's rank correlation between PSLM and RWI rankings
+corr_pslm_rwi, _ = spearmanr(pslm_district_ranking['Wealth_Index1'], rwi_district_ranking['rwi'])
+
+print(f"Spearman's rank correlation between PSLM and RWI: {corr_pslm_rwi:.2f}")
+
+# 1. Scatter Plot
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x=pslm_district_ranking['Wealth_Index1'], y=rwi_district_ranking['rwi'])
+plt.title("Scatter Plot of PSLM vs. RWI Wealth Indices")
+plt.xlabel("PSLM Wealth Index")
+plt.ylabel("RWI Score")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# 2. Heatmap (Difference between rankings)
+# Assuming you have a shapefile 'districts_shapefile.shp' with district boundaries
+gdf = gpd.read_file(abspath_curr + '/data/pak_admbnda_adm2_wfp_20220909.shp')
+
+# Calculate the difference in rankings
+pslm_district_ranking['PSLM Rank'] = pslm_district_ranking.index + 1
+rwi_district_ranking['RWI Rank'] = rwi_district_ranking.index + 1
+merged_rankings = pd.merge(pslm_district_ranking, rwi_district_ranking, left_on='District', right_on='ADM2_EN')
+merged_rankings['Rank Difference'] = merged_rankings['PSLM Rank'] - merged_rankings['RWI Rank']
+
+# Merge with the geodataframe
+gdf = gdf.merge(merged_rankings, left_on='ADM2_EN', right_on='District', how='inner')
+
+# Plotting the heatmap
+fig, ax = plt.subplots(figsize=(12, 10))
+gdf.plot(column='Rank Difference', cmap='coolwarm', linewidth=0.8, ax=ax, edgecolor='0.8', legend=True)
+plt.title("Difference in District Wealth Rankings between PSLM and RWI")
+plt.tight_layout()
+plt.show()
+
+# Merge the two datasets on the district names
+combined_data = pslm_district_ranking.merge(rwi_district_ranking, left_on='District', right_on='ADM2_EN')
+
+n_bootstrap_samples = 1000
+correlation_samples = []
+
+for _ in range(n_bootstrap_samples):
+    # Randomly sample districts with replacement
+    sample = combined_data.sample(n=combined_data.shape[0], replace=True)
+
+    # Calculate the correlation for this resampled data
+    corr, _ = spearmanr(sample['Wealth_Index1'], sample['rwi'])
+    correlation_samples.append(corr)
+
+# Analyze bootstrap results
+bootstrap_mean = np.mean(correlation_samples)
+bootstrap_std = np.std(correlation_samples)
+confidence_interval = np.percentile(correlation_samples, [2.5, 97.5])
+
+print(f"Bootstrap Mean Correlation: {bootstrap_mean:.2f}")
+print(f"Bootstrap Standard Deviation: {bootstrap_std:.2f}")
+print(f"95% Confidence Interval: ({confidence_interval[0]:.2f}, {confidence_interval[1]:.2f})")
+
+# Scatter plot of RWI vs PSLM scores
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x=combined_data['Wealth_Index1'], y=combined_data['rwi'])
+plt.title("Scatter Plot of PSLM vs. RWI Wealth Indices")
+plt.xlabel("PSLM Wealth Index")
+plt.ylabel("RWI Score")
+plt.grid(True)
+plt.tight_layout()
+#plt.show()
+
+plt.savefig(abspath_curr + '/data/scatter_plot.png')
+plt.show()
+
+# Histograms
+plt.figure(figsize=(14, 6))
+
+# PSLM histogram
+plt.subplot(1, 2, 1)
+sns.histplot(combined_data['Wealth_Index1'], kde=True)
+plt.title('Distribution of PSLM Wealth Index')
+plt.xlabel('PSLM Wealth Index')
+plt.ylabel('Count')
+
+# RWI histogram
+plt.subplot(1, 2, 2)
+sns.histplot(combined_data['rwi'], kde=True)
+plt.title('Distribution of RWI Scores')
+plt.xlabel('RWI Score')
+plt.ylabel('Count')
+
+plt.tight_layout()
+#plt.show()
+
+
+plt.savefig(abspath_curr + '/data/histplot.png')
+plt.show()
+
+"""## Comparing the RWI with the  Harmonized Wealth index from the PSLM data"""
+
+pslm_data1 = pd.read_csv('PSLM_data_with_harmonized_wealth_index.csv')
+# Aggregating Wealth Index for PSLM
+pslm_district_wealth1 = pslm_data1.groupby('District')['Harmonized_Wealth_Index1'].mean().reset_index()
+
+# Filter the RWI data to include only the common districts
+common_districts1 = set(pslm_district_wealth1['District'])
+filtered_rwi_data1 = filtered_rwi_district_data[filtered_rwi_district_data['ADM2_EN'].isin(common_districts)]
+
+# Aggregating RWI scores by district
+rwi_district_wealth1 = filtered_rwi_data1.groupby('ADM2_EN')['rwi'].mean()
+
+# Ranking Districts based on wealth indices
+pslm_district_ranking1 = pslm_district_wealth1.sort_values(by='Harmonized_Wealth_Index1', ascending=False).reset_index(drop=True)
+rwi_district_ranking1 = rwi_district_wealth1.sort_values(ascending=False).reset_index()
+
+# Save the rankings (optional)
+pslm_district_ranking1.to_csv('pslm_district_ranking_with_HarmonizedWealthIndex.csv', index=False)
+rwi_district_ranking1.to_csv('rwi_district_ranking_with_rwi.csv', index=False)
+
+# Calculate Spearman's rank correlation between PSLM and RWI rankings
+corr_pslm_rwi, _ = spearmanr(pslm_district_ranking1['Harmonized_Wealth_Index1'], rwi_district_ranking1['rwi'])
+
+print(f"Spearman's rank correlation between PSLM and RWI: {corr_pslm_rwi:.2f}")
+
+# 1. Scatter Plot
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x=pslm_district_ranking1['Harmonized_Wealth_Index1'], y=rwi_district_ranking1['rwi'])
+plt.title("Scatter Plot of PSLM vs. RWI Wealth Indices")
+plt.xlabel("PSLM harmonized Wealth Index")
+plt.ylabel("RWI Score")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# 2. Heatmap (Difference between rankings)
+# Assuming you have a shapefile 'districts_shapefile.shp' with district boundaries
+gdf = gpd.read_file(abspath_curr + '/data/pak_admbnda_adm2_wfp_20220909.shp')
+
+# Calculate the difference in rankings
+pslm_district_ranking1['PSLM Rank'] = pslm_district_ranking1.index + 1
+rwi_district_ranking1['RWI Rank'] = rwi_district_ranking1.index + 1
+merged_rankings1 = pd.merge(pslm_district_ranking1, rwi_district_ranking1, left_on='District', right_on='ADM2_EN')
+merged_rankings1['Rank Difference'] = merged_rankings1['PSLM Rank'] - merged_rankings1['RWI Rank']
+
+# Merge with the geodataframe
+gdf = gdf.merge(merged_rankings1, left_on='ADM2_EN', right_on='District', how='inner')
+
+# Plotting the heatmap
+fig, ax = plt.subplots(figsize=(12, 10))
+gdf.plot(column='Rank Difference', cmap='coolwarm', linewidth=0.8, ax=ax, edgecolor='0.8', legend=True)
+plt.title("Difference in District Wealth Rankings between PSLM and RWI")
+plt.tight_layout()
+plt.show()
+
+# Aggregate the error
+agg_error = filtered_rwi_district_data.groupby('ADM2_EN')['error'].mean().reset_index().sort_values(by='error', ascending=False)
+
+# Sorted Dot Plot
+plt.figure(figsize=(10, 15))
+sns.stripplot(data=agg_error, y='ADM2_EN', x='error', size=5, palette='viridis', jitter=False, linewidth=0.5)
+plt.title('Sorted Dot Plot of RWI Aggregated Error by District')
+plt.xlabel('Average Error')
+plt.ylabel('District')
+plt.tight_layout()
+plt.show()
+
+# Histogram
+plt.figure(figsize=(10, 6))
+sns.histplot(agg_error['error'], kde=True, bins=30, color='skyblue')
+plt.title('Histogram of RWI Aggregated Errors')
+plt.xlabel('Error')
+plt.ylabel('Number of Districts')
+plt.tight_layout()
+plt.show()
+
+# Merge the two datasets on the district names
+combined_data1 = pslm_district_ranking1.merge(rwi_district_ranking1, left_on='District', right_on='ADM2_EN')
+
+n_bootstrap_samples = 1000
+correlation_samples1 = []
+
+for _ in range(n_bootstrap_samples):
+    # Randomly sample districts with replacement
+    sample1 = combined_data1.sample(n=combined_data1.shape[0], replace=True)
+
+    # Calculate the correlation for this resampled data
+    corr1, _ = spearmanr(sample1['Harmonized_Wealth_Index1'], sample1['rwi'])
+    correlation_samples1.append(corr1)
+
+# Analyze bootstrap results
+bootstrap_mean1 = np.mean(correlation_samples1)
+bootstrap_std1 = np.std(correlation_samples1)
+confidence_interval1 = np.percentile(correlation_samples1, [2.5, 97.5])
+
+print(f"Bootstrap Mean Correlation: {bootstrap_mean1:.2f}")
+print(f"Bootstrap Standard Deviation: {bootstrap_std1:.2f}")
+print(f"95% Confidence Interval: ({confidence_interval1[0]:.2f}, {confidence_interval1[1]:.2f})")
+
+# Scatter plot of RWI vs PSLM scores
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x=combined_data1['Harmonized_Wealth_Index1'], y=combined_data1['rwi'])
+plt.title("Scatter Plot of PSLM vs. RWI Wealth Indices")
+plt.xlabel("PSLM Harmonize Wealth Index")
+plt.ylabel("RWI Score")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Histograms
+plt.figure(figsize=(14, 6))
+
+# PSLM histogram
+plt.subplot(1, 2, 1)
+sns.histplot(combined_data1['Harmonized_Wealth_Index1'], kde=True)
+plt.title('Distribution of PSLM Harmonize Wealth Index')
+plt.xlabel('PSLM Harmonize Wealth Index')
+plt.ylabel('Count')
+
+# RWI histogram
+plt.subplot(1, 2, 2)
+sns.histplot(combined_data['rwi'], kde=True)
+plt.title('Distribution of RWI Scores')
+plt.xlabel('RWI Score')
+plt.ylabel('Count')
+
+plt.tight_layout()
+plt.show()
+
+"""## TASK 4: Leverage the higher resolution of the RWI: To what extent can be used for targeting of social programs?"""
+
+# 1. Wealth Distribution Within a Sample District (e.g., 'Karachi Central')
+sample_district_data = filtered_rwi_district_data[filtered_rwi_district_data['ADM2_EN'] == 'Karachi Central']
+sns.kdeplot(sample_district_data['rwi'], shade=True)
+plt.title('Wealth Distribution Within Karachi Central')
+plt.xlabel('RWI Score')
+plt.show()
+
+import math
+
+num_districts_rwi = filtered_rwi_district_data['ADM2_EN'].nunique()
+
+# Set subplot dimensions for RWI
+num_cols_rwi = 8
+num_rows_rwi = math.ceil(num_districts_rwi / num_cols_rwi)
+
+plt.figure(figsize=(15, num_rows_rwi * 2))
+
+for idx, district in enumerate(filtered_rwi_district_data['ADM2_EN'].unique()):
+    plt.subplot(num_rows_rwi, num_cols_rwi, idx+1)
+    district_data = filtered_rwi_district_data[filtered_rwi_district_data['ADM2_EN'] == district]
+    sns.kdeplot(district_data['rwi'], fill=True)
+    plt.title(district)
+    plt.tight_layout()
+    #plt.savefig(abspath_curr + '/data/plot.png')
+plt.show()
+
+rw_percentiles = filtered_rwi_district_data.groupby('ADM2_EN')['rwi'].quantile(0.10).reset_index()
+rw_percentiles.rename(columns={'rwi': 'RWI_10th_Percentile'}, inplace=True)
+
+pslm_percentiles = pslm_district_wealth.groupby('District')['Wealth_Index1'].quantile(0.10).reset_index()
+pslm_percentiles.rename(columns={'Wealth_Index1': 'PSLM_10th_Percentile'}, inplace=True)
+
+merged_percentiles = rw_percentiles.merge(pslm_percentiles, left_on='ADM2_EN', right_on='District', how='inner')
+print(merged_percentiles)
+
+merged_percentiles.set_index('ADM2_EN').plot(kind='bar', figsize=(20,10))
+plt.title('Comparison of 10th Percentile between RWI and PSLM data')
+plt.ylabel('Wealth Index Value')
+plt.xlabel('District')
+plt.tight_layout()
+
+#plt.savefig(abspath_curr + '/data/bar.png')
+
+plt.show()
+
+# Extracting urban and rural data subsets from the PSLM data
+urban_data_pslm = pslm_data[pslm_data['rural'] == 'urban']
+rural_data_pslm = pslm_data[pslm_data['rural'] == 'rural']
+
+plt.figure(figsize=(10, 6))
+sns.kdeplot(urban_data_pslm['Wealth_Index1'], fill=True, label='Urban')
+sns.kdeplot(rural_data_pslm['Wealth_Index1'], fill=True, label='Rural')
+plt.legend()
+plt.title('Wealth Distribution in Urban vs. Rural Areas (PSLM Data)')
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Load the PSLM and HIES data with wealth indices
 pslm_data = pd.read_csv('PSLM_data_with_wealth_index.csv')
@@ -517,7 +824,7 @@ pslm_district_wealth = pslm_data.groupby('District')['Wealth_Index1'].mean().res
 
 # Filter the RWI data to include only the common districts
 common_districts = set(hies_district_wealth['District']).intersection(pslm_district_wealth['District'])
-filtered_rwi_data = rwi_data_with_district[rwi_data_with_district['ADM2_EN'].isin(common_districts)]
+filtered_rwi_data = filtered_rwi_district_data[filtered_rwi_district_data['ADM2_EN'].isin(common_districts)]
 
 rwi_district_wealth = filtered_rwi_data.groupby('ADM2_EN')['rwi'].mean()
 
@@ -530,6 +837,27 @@ rwi_district_ranking = rwi_district_wealth.rank(ascending=False).astype(int)
 hies_district_ranking.to_csv('hies_district_ranking.csv', index=False)
 pslm_district_ranking.to_csv('pslm_district_ranking.csv', index=False)
 rwi_district_ranking.to_csv('rwi_district_ranking.csv', index=False)
+
+import seaborn as sns
+
+# 1. Aggregate the RWI score at the district level
+agg_rwi = filtered_rwi_district_data.groupby('ADM2_EN')['rwi'].mean().reset_index()
+
+# 2. Merge the aggregated RWI scores with the wealth index from the pslm_data
+
+merged_data = pd.merge(agg_rwi, pslm_data, how='inner', left_on='ADM2_EN', right_on='District')
+
+# 3. Calculate the correlation between the two indices
+correlation = merged_data['rwi'].corr(merged_data['Wealth_Index1'])
+# 4. Visualize the relationship
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=merged_data, x='rwi', y='Wealth_Index1')
+plt.title(f"Correlation between RWI and PSLM Wealth Index: {correlation:.2f}")
+plt.xlabel("RWI Score")
+plt.ylabel("PSLM Wealth Index")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
 
 district_mean_rwi = pslm_data.groupby('District')['Wealth_Index1'].mean().reset_index()
 
@@ -547,16 +875,6 @@ ranked_districts = district_mean_rwi.sort_values(by='Wealth_Index1', ascending=F
 # Print the ranked districts
 print(ranked_districts)
 
-# Calculate correlations between HIES, PSLM, and RWI rankings
-corr_hies_rwi, _ = spearmanr(hies_district_ranking['Wealth_Index1'], rwi_district_ranking)
-corr_pslm_rwi, _ = spearmanr(pslm_district_ranking['Wealth_Index1'], rwi_district_ranking)
-corr_hies_pslm, _ = spearmanr(hies_district_ranking['Wealth_Index1'], pslm_district_ranking['Wealth_Index1'])
-
-# Print correlations
-print(f"Spearman's rank correlation between HIES and RWI: {corr_hies_rwi}")
-print(f"Spearman's rank correlation between PSLM and RWI: {corr_pslm_rwi}")
-print(f"Spearman's rank correlation between HIES and PSLM: {corr_hies_pslm}")
-
 # Perform bootstrap resampling for uncertainty estimation
 n_bootstrap_samples = 1000
 correlation_samples = []
@@ -569,6 +887,44 @@ for _ in range(n_bootstrap_samples):
 
     # Calculate correlations for the bootstrap sample
     corr_hies_pslm_sample, _ = spearmanr(hies_sample['Wealth_Index1'], pslm_sample['Wealth_Index1'])
+    correlation_samples.append(corr_hies_pslm_sample)
+
+# Calculate confidence intervals
+confidence_interval = np.percentile(correlation_samples, [2.5, 97.5])
+print(f"95% Confidence Interval for HIES and PSLM correlation: {confidence_interval}")
+
+# Load the PSLM and HIES data with wealth indices
+pslm_data1 = pd.read_csv('PSLM_data_with_harmonized_wealth_index.csv')
+hies_data1 = pd.read_csv('HIES_data_with_harmonized_wealth_index.csv')
+
+district_mean_rwi = pslm_data1.groupby('District')['Harmonized_Wealth_Index1'].mean().reset_index()
+
+# Sort the districts by RWI score in descending order
+ranked_districts = district_mean_rwi.sort_values(by='Harmonized_Wealth_Index1', ascending=False)
+
+# Print the ranked districts
+print(ranked_districts)
+
+district_mean_rwi = hies_data1.groupby('District')['Harmonized_Wealth_Index1'].mean().reset_index()
+
+# Sort the districts by RWI score in descending order
+ranked_districts = district_mean_rwi.sort_values(by='Harmonized_Wealth_Index1', ascending=False)
+
+# Print the ranked districts
+print(ranked_districts)
+
+# Perform bootstrap resampling for uncertainty estimation
+n_bootstrap_samples = 1000
+correlation_samples = []
+
+for _ in range(n_bootstrap_samples):
+    # Randomly sample districts with replacement
+    sample_indices = np.random.choice(len(hies_data1), len(hies_data1), replace=True)
+    hies_sample1 = hies_data1.iloc[sample_indices]
+    pslm_sample1 = pslm_data1.iloc[sample_indices]
+
+    # Calculate correlations for the bootstrap sample
+    corr_hies_pslm_sample, _ = spearmanr(hies_sample1['Harmonized_Wealth_Index1'], pslm_sample1['Harmonized_Wealth_Index1'])
     correlation_samples.append(corr_hies_pslm_sample)
 
 # Calculate confidence intervals
