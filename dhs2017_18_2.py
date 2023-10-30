@@ -16,7 +16,7 @@ drive.mount('/content/drive')
 # Get the absolute path of the current folder
 abspath_curr = '/content/drive/My Drive/Colab Notebooks/'
 
-"""## Notebook Variables"""
+"""## Indicator Variables"""
 
 extraColumns = ['land', 'house', 'landarea', 'memsleep']
 categoryColumns = ['hv201', 'hv205', 'hv226', 'hv213', 'hv214', 'hv215']
@@ -123,6 +123,32 @@ from sklearn.preprocessing import MinMaxScaler
 
 dhs_data = pd.read_stata(abspath_curr + '/data/PKHR71DT/PKHR71FL.DTA')
 #dhs_data = pd.read_stata('./PKHR71DT/PKHR71FL.DTA')
+
+from pandas.core.tools.datetimes import unique
+test= dhs_data['shdist']
+test1= unique(test)
+print(test1)
+len(test1)
+
+!pip install pyreadstat
+import pyreadstat
+
+# Assuming you have a Stata dataset file named 'your_data.dta'
+df, meta = pyreadstat.read_dta(abspath_curr + '/data/PKHR71DT/PKHR71FL.DTA')
+
+# Access variable labels from the metadata
+variable_labels = meta.column_labels
+
+# Print variable labels
+for i, var_label in enumerate(variable_labels):
+    var_name = df.columns[i]
+    print(f"Variable: {var_name}, Label: {var_label}")
+
+from pandas.core.tools.datetimes import unique
+test= dhs_data['hv024']
+test1= unique(test)
+print(test1)
+len(test1)
 
 dhs_data1 = pd.read_stata(abspath_curr + '/data/PKBR71DT/PKBR71FL.DTA', convert_categoricals=False)
 #dhs_data1 = pd.read_stata('./PKBR71DT/PKBR71FL.DTA', convert_categoricals=False)
@@ -266,10 +292,10 @@ summaryUrbanDF
 """
 
 # Extract the selected columns
-selected_variables = dhs_data_req[summaryCommonVarDF['Variables']].copy()
+selected_variables = dhs_data_req[requiredColumns].copy()
 
 # Drop rows with missing values
-selected_variables = selected_variables.dropna()
+selected_variables = selected_variables.fillna(0)
 
 # Perform Min-Max scaling
 scaler = MinMaxScaler()
@@ -290,6 +316,123 @@ basis_vector = basis_vector.sort_values(by='Magnitude', ascending=False)
 
 # Save the basis vector to a CSV file
 basis_vector.to_csv('asset_index_CommonVariables_basis_vector.csv', index=False)
+
+# Add the wealth index as a new column in your DataFrame
+dhs_data_req['Wealth_Index1'] = asset_index
+
+# Save the updated DataFrame with the wealth index to a new CSV file
+dhs_data_req.to_csv('DHS_data_with_wealth_index.csv', index=False)
+
+dhs_data_req['Wealth_Index1']
+
+# Load the DHS dataset
+dhs_data = pd.read_csv('DHS_data_with_wealth_index.csv')
+
+# Rename the province and urban/rural columns for clarity
+dhs_data = dhs_data.rename(columns={'hv024': 'Province', 'hv025': 'Urban_Rural'})
+
+# Map the numerical codes to actual province names and urban/rural categories
+province_mapping = {1: 'kpk', 2: 'punjab', 3: 'sindh', 4: 'balochistan', 5: 'fata', 6: 'ict', 7: 'gb', 8: 'ajk'}
+urban_rural_mapping = {1: 'urban', 2: 'rural'}
+
+dhs_data['Province'] = dhs_data['Province'].replace(province_mapping)
+dhs_data['Urban_Rural'] = dhs_data['Urban_Rural'].replace(urban_rural_mapping)
+
+# Calculate distribution statistics for the wealth index in the DHS dataset
+dhs_wealth_index_stats_national = dhs_data['Wealth_Index1'].describe()
+dhs_wealth_index_stats_province = dhs_data.groupby('Province')['Wealth_Index1'].describe()
+dhs_wealth_index_stats_urban_rural = dhs_data.groupby('Urban_Rural')['Wealth_Index1'].describe()
+dhs_wealth_index_stats_province_urban_rural = dhs_data.groupby(['Province', 'Urban_Rural'])['Wealth_Index1'].describe()
+
+# Display the results
+print("National Level:")
+print(dhs_wealth_index_stats_national)
+print("\nBy Province:")
+print(dhs_wealth_index_stats_province)
+print("\nBy Urban/Rural:")
+print(dhs_wealth_index_stats_urban_rural)
+print("\nBy Province and Urban/Rural:")
+print(dhs_wealth_index_stats_province_urban_rural)
+
+from google.colab import files
+# dhs_data_req.to_csv('DHS_data_with_wealth_index.csv', index=False)
+# files.download('DHS_data_with_wealth_index.csv')
+
+dhs_data_req['shdist']
+
+import geopandas as gpd
+gdf = gpd.read_file(abspath_curr + '/data/pak_admbnda_adm2_wfp_20220909.shp')
+
+# Convert the district names to lowercase
+gdf['ADM2_EN'] = gdf['ADM2_EN'].str.lower()
+dhs_data_req['shdist'] = dhs_data_req['shdist'].str.lower()
+
+# Left join on the district names
+merged_data = gdf.merge(dhs_data_req, left_on='ADM2_EN', right_on='shdist', how='left')
+
+# Fill NaN values with a default value (e.g., 0) or use another suitable method like interpolation
+merged_data['Wealth_Index1'].fillna(0, inplace=True)
+
+# Plotting the heatmap
+fig, ax = plt.subplots(figsize=(12, 10))
+merged_data.plot(column='Wealth_Index1', cmap='coolwarm', linewidth=0.8, ax=ax, edgecolor='0.8', legend=True)
+plt.title("Wealth index of districts in Pakistan")
+plt.tight_layout()
+plt.show()
+
+Provinces  = gpd.read_file(abspath_curr + '/data/pak_admbnda_adm1_wfp_20220909.shp')
+
+# Create a mapping between province names
+province_mapping = {
+    'Azad Kashmir': 'ajk',
+    'Balochistan': 'balochistan',
+    'Gilgit Baltistan': 'gb',
+    'Islamabad': 'ict',
+    'Khyber Pakhtunkhwa': 'kpk',
+    'Punjab': 'punjab',
+    'Sindh': 'sindh'
+}
+
+# Create a new column 'Province_Short' in the Provinces dataframe with the short form of the province name
+Provinces['Province_Short'] = Provinces['ADM1_EN'].map(province_mapping)
+
+# Left join on the province short names
+merged_data = Provinces.merge(dhs_data_req, left_on='Province_Short', right_on='hv024', how='left')
+
+# Fill NaN values with a default value (e.g., 0)
+merged_data['Wealth_Index1'].fillna(0, inplace=True)
+
+# Plotting the heatmap
+fig, ax = plt.subplots(figsize=(12, 10))
+merged_data.plot(column='Wealth_Index1', cmap='coolwarm', linewidth=0.8, ax=ax, edgecolor='0.8', legend=True)
+plt.title("Wealth index of provinces in Pakistan")
+plt.tight_layout()
+plt.show()
+
+National  = gpd.read_file(abspath_curr + '/data/pak_admbnda_adm0_wfp_20220909.shp')
+
+# Create a mapping between province names
+national_mapping = {
+   'PK': 'PK7'
+}
+
+# Create a new column 'Province_Short' in the Provinces dataframe with the short form of the province name
+National['national_Short'] = National['ADM0_PCODE'].map(national_mapping)
+
+# Left join on the province short names
+merged_data = National.merge(dhs_data_req, left_on='national_Short', right_on='hv000', how='left')
+
+# Fill NaN values with a default value (e.g., 0)
+#merged_data['Wealth_Index1'].fillna(0, inplace=True)
+
+# Plotting the heatmap
+fig, ax = plt.subplots(figsize=(12, 10))
+merged_data.plot(column='Wealth_Index1', cmap='coolwarm', linewidth=0.8, ax=ax, edgecolor='0.8', legend=True)
+plt.title("Wealth index of provinces in Pakistan")
+plt.tight_layout()
+plt.show()
+
+
 
 """## PCA for URBAN
 
@@ -357,18 +500,6 @@ basis_vector.to_csv('asset_index_Rural_basis_vector.csv', index=False)
 #from google.colab import files
 #basis_vector.to_csv('asset_index_Rural_basis_vector.csv', index=False)
 #files.download('asset_index_Rural_basis_vector.csv')
-
-def factorAnalysis(df, score):
-    pass
-
-def linearRegression(df, score):
-    pass
-
-def calculateCombinedWealthScore(df, score):
-    pass
-
-def tabulationForHistogram(df, score):
-    pass
 
 
 
